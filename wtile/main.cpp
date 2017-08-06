@@ -8,6 +8,9 @@
 #include <shlobj.h>
 #include <atlbase.h>
 #include <comutil.h>
+#include <dwmapi.h>
+
+#pragma comment(lib, "Dwmapi.lib")
 
 auto make_unique_hook(HHOOK h) {
   return std::unique_ptr<std::remove_pointer_t<HHOOK>, decltype(&UnhookWindowsHookEx)>{h, &UnhookWindowsHookEx};
@@ -62,8 +65,10 @@ std::vector<HWND> top_level_wnds(IVirtualDesktopManager* mgr) {
     placement.length = sizeof(placement);
     wchar_t title[255]{};
     BOOL is_on_current_desktop;
+    BOOL is_cloaked;
 
     if (IsWindowVisible(wnd) && !IsIconic(wnd)
+      && SUCCEEDED(DwmGetWindowAttribute(wnd, DWMWA_CLOAKED, &is_cloaked, sizeof(is_cloaked))) && !is_cloaked
       && (GetWindowLongPtr(wnd, GWL_STYLE) & WS_MAXIMIZEBOX)
       && SUCCEEDED(state.mgr->IsWindowOnCurrentVirtualDesktop(wnd, &is_on_current_desktop)) && is_on_current_desktop 
       && GetWindowPlacement(wnd, &placement) && !(placement.showCmd & SW_SHOWMINIMIZED) && ((placement.showCmd & SW_SHOWNORMAL) || (placement.showCmd & SW_SHOWMAXIMIZED)) 
@@ -99,11 +104,6 @@ void shift_focus(std::vector<HWND> wnds, Dir dir) {
     if (!GetWindowRect(wnd, &rc)) {
       continue;
     }
-
-    wchar_t buff[255]{};
-    wchar_t buff2[255]{};
-    GetWindowTextW(wnd, buff, std::size(buff));
-    GetClassNameW(wnd, buff2, std::size(buff2));
 
     switch (dir) {
     case Dir::h: 
