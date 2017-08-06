@@ -63,9 +63,10 @@ std::vector<HWND> top_level_wnds(IVirtualDesktopManager* mgr) {
     wchar_t title[255]{};
     BOOL is_on_current_desktop;
 
-    if (IsWindowVisible(wnd) 
+    if (IsWindowVisible(wnd) && !IsIconic(wnd)
+      && (GetWindowLongPtr(wnd, GWL_STYLE) & WS_MAXIMIZEBOX)
       && SUCCEEDED(state.mgr->IsWindowOnCurrentVirtualDesktop(wnd, &is_on_current_desktop)) && is_on_current_desktop 
-      && GetWindowPlacement(wnd, &placement) && ((placement.showCmd & SW_SHOWNORMAL) || (placement.showCmd & SW_SHOWMAXIMIZED)) 
+      && GetWindowPlacement(wnd, &placement) && !(placement.showCmd & SW_SHOWMINIMIZED) && ((placement.showCmd & SW_SHOWNORMAL) || (placement.showCmd & SW_SHOWMAXIMIZED)) 
       && GetWindowTextW(wnd, title, std::size(title)) && title[0] && wcscmp(title, L"Program Manager") != 0) {
       state.r.push_back(wnd);
     }
@@ -195,7 +196,7 @@ int APIENTRY wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
   struct {
     HWND last_fg = nullptr;
     bool activated = false;
-  } divvy;
+  } divvy{};
 
   MSG m;
   while (GetMessageW(&m, nullptr, 0, 0)) {
