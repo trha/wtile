@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <memory>
+#include <algorithm>
 #include <type_traits>
 #include <fmt/format.h>
 #include <vector>
@@ -38,19 +39,28 @@ enum class Dir {
   h, j, k, l
 };
 
-bool move_divvy_to_cursor() {
-  auto divvy_wnd = FindWindowW(L"QTool", nullptr);
-  if (!divvy_wnd) {
+bool move_divvy() {
+  HWND divvy_wnd;
+  HWND wnd;
+  RECT divvy_rc;
+  RECT target_rc;
+  wchar_t s[255];
+  if (!(divvy_wnd = FindWindowW(L"QTool", nullptr)) 
+      || !(wnd = GetForegroundWindow(), GetWindowTextW(wnd, s, std::size(s)), OutputDebugStringW(s), true)
+      || !GetWindowRect(divvy_wnd, &divvy_rc) 
+      || !GetWindowRect(wnd, &target_rc)
+    ) {
     return false;
   }
 
-  POINT cursor;
-  if (!GetCursorPos(&cursor)) {
-    return false;
-  }
-
-  SetWindowPos(divvy_wnd, nullptr, cursor.x, cursor.y, 0, 0, SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
-  return true;
+  return SetWindowPos(
+    divvy_wnd, 
+    nullptr, 
+    target_rc.left + std::max(int(target_rc.right - target_rc.left - divvy_rc.right + divvy_rc.left) / 2, 0), 
+    target_rc.top + std::max(int(target_rc.bottom - target_rc.top - divvy_rc.bottom + divvy_rc.top) / 2, 0), 
+    0, 0,
+    SWP_NOSIZE | SWP_ASYNCWINDOWPOS
+  ) != 0;
 }
 
 std::vector<HWND> top_level_wnds(IVirtualDesktopManager* mgr) {
@@ -193,33 +203,26 @@ int APIENTRY wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
   global.kb_hook =  kb_hook.get();
   global.mouse_hook = mouse_hook.get();
   
-  struct {
-    HWND last_fg = nullptr;
-    bool activated = false;
-  } divvy{};
+  auto is_divvy_activated = false;
 
   MSG m;
   while (GetMessageW(&m, nullptr, 0, 0)) {
     switch (m.message) {
     case my_msg::divvy_hotkey_pressed:
-    divvy.activated = move_divvy_to_cursor();
-    if (divvy.activated) {
-      divvy.last_fg = GetForegroundWindow();
-    }
+    is_divvy_activated = move_divvy();
     break;
 
     case my_msg::left_up: {
-      auto fg = GetForegroundWindow();
-      if (divvy.activated && fg != divvy.last_fg) {
-        divvy.last_fg = fg;
-        move_divvy_to_cursor();
+      if (is_divvy_activated) {
+        is_divvy_activated = move_divvy();
       }
       break;
     }
 
     case my_msg::esc_pressed:
-    divvy.activated = false;
+    is_divvy_activated = false;
     break;
+
     case my_msg::shift_focus: 
     shift_focus(top_level_wnds(desktop_mgr.p), static_cast<Dir>(m.wParam));
     break;
